@@ -1,2 +1,5 @@
 # shewanella_emp
-Filtering and analysing Shewanellaceae OTUs from the 2012 EMP dataset.
+Filtering and analysing Shewanellaceae OTUs from a Porifera-dedicated 2012 EMP dataset.
+
+R script to filter out and analyse Shewanellaceae OTU information from a Porifera-dedicated 2012 EMP dataset.
+See http://rdcu.be/i4sg for the overarching paper describing in detail the abovementioned dataset.
