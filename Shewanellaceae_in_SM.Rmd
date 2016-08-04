@@ -1,0 +1,153 @@
+---
+title: "Shewanellaceae in SM"
+author: "André Soares"
+date: "14 March 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Filtering the SM dataset for Shewanellaceae OTUs
+
+From files in Dropbox folder "SM Paper 01 Supplements":
+
+Table S1_79199_0_data_set_1474767_nx5v7y.xls --> renamed 'SM_LV.metadata' - **Metadata table**  
+Table S2_79199_0_data_set_1474789_nx5wfh.txt --> renamed 'SM_LV.shared' - **OTU table**  
+Table S3_79199_0_data_set_1474790_nx6289.txt --> renamed 'SM_LV.database' - **Taxonomical table**
+
+# **Step 1**:
+  Using 'grep' from the Linux CLI, the Taxonomical table was filtered for any **Shewanellaceae hits**.
+```{r, eval=FALSE, include=TRUE}
+grep "Shewanella" SM_LV.database > Shwnl_OTUs.txt
+#Got 16 hits - OTUs
+```
+  File Shwnl_OTUs.txt now contains **.fasta sequence and RDP, SILVA and Greengenes ID's for all Shewanellaceae OTUs in the SM dataset**.
+```{r, include=TRUE, eval=FALSE}
+head -1 Shwnl_OTUs.txt
+
+Otu002008	SD11SED.1020180_8075	T--AC--GA-GG-GGT---GCA-A-G--C-G--T--T--AA-T-CGG-AA----TT-A--C-T--GG-GC--GT-A--AA-GC-GT-AC--G-CA-G-G-C-G--G--T-TT-G-T-T-----AA--G-C-G-A---G-A-T-G--TG--A-AA-GC--C-C-CG-G-G---CT-C-AA-C-C-T-G-G-G-A--A-C-TBacteria(100);Proteobacteria(100);Gammaproteobacteria(100);Alteromonadales(99);Shewanellaceae(66);Shewanella(66);unclassified;unclassified;unclassified;	k__Bacteria(100);p__Proteobacteria(100);c__Gammaproteobacteria(100);o__Alteromonadales(79);f__Shewanellaceae(65);g__Shewanella(65);s__benthica(60);	Bacteria(100);Proteobacteria(100);Gammaproteobacteria(100);Alteromonadales(99);Shewanellaceae(68);Shewanella(68);
+```
+
+# **Step 2**: 
+  Filter the SM OTU table for the OTU IDs found with **Step 1**:
+  
+  Extract OTU ID's from Shwnl_OTUs.txt
+```{r, include=TRUE, eval=FALSE}
+cut -f1 Shwnl_OTUs.txt > Shwnl_OTUs_list.txt
+```
+
+  Using Shwnl_OTUs_list.txt to filter the OTU table in R:
+```{r, eval=FALSE}
+setwd("~/Desktop/SM")
+library(dplyr)
+library(picante)
+SM <- read.table("SM_LV.shared", header = TRUE, sep='\t', check.names=FALSE)
+dim(SM)
+#45982 OTUs in 974 sites
+
+Shwnl_OTU_list <- read.table("Shwnl_OTUs_list.txt", sep=',')
+
+colnames(SM)[0] <- "OTU"
+colnames(Shwnl_OTU_list)[1] <- "OTU"
+
+Shwnl_inSM <- inner_join(Shwnl_OTU_list, SM, by="OTU")
+
+#Table still huge, eliminate samples with 0 sequences overall:
+
+#turns 1st column into rownames
+clean_Shwnl_inSM <- Shwnl_inSM[,-1]
+rownames(clean_Shwnl_inSM)<-Shwnl_inSM[,1]
+
+#any column summing 0 is eliminated
+Shwnl_inSM_noSing <- clean_Shwnl_inSM[,colSums(clean_Shwnl_inSM) > 0]
+
+#245 samples containing 1 or more sequences attributed to a Shewanellaceae OTU (n=16)
+```
+
+
+# **Step 3**:
+  Using the Shewanellaceae-specific table to get OTU and sequence numbers per metadata columns of interest.  
+  Importing SM metadata:
+```{r, eval=FALSE}
+Shwnl_metadata <- read.table("SM_LV.metadata", header = TRUE, sep=',', check.names=FALSE)
+#937 samples described by 16 E.V.
+```
+
+  Extracting Shewanellaceae sample list from the Shewanellaceae-specific OTU table:
+```{r, eval=FALSE}
+Spl_list_Shwnl_inSM<-as.data.frame(colnames(Shwnl_inSM_noSing))
+colnames(Spl_list_Shwnl_inSM)[1] <- "SampleID"
+#245 samples
+```
+
+  Filtering metadata for samples containing Shewanellaceae OTUs:
+```{r, eval=FALSE}
+metadata_Shwnl_inSM <- left_join(Spl_list_Shwnl_inSM, Shwnl_metadata, by="SampleID")
+#245 samples
+```
+  Transposing OTU table for grouped statistics:
+```{r, eval=FALSE}
+t_Shwnl_inSM_noSing <- t(Shwnl_inSM_noSing)
+t_Shwnl_inSM_noSing <- data.frame(t_Shwnl_inSM_noSing[,-1], row.names=t_Shwnl_inSM_noSing[,1])
+```
+
+Numbers of OTUs per sponge species (column SCIE_NAME) and country:
+```{r, eval=FALSE}
+library(vegan)
+Shwnl_OTUs_per_SpongeSpecies<-specnumber(t_Shwnl_inSM_noSing, metadata_Shwnl_inSM$SCIE_NAME)
+Shwnl_OTUs_per_Country<-specnumber(t_Shwnl_inSM_noSing, metadata_Shwnl_inSM$COUNTRY)
+```
+
+Numbers of sequences per sponge species and country:
+```{r, eval=FALSE}
+Shwnl_Seqs_per_SpongeSpecies<-aggregate(t_Shwnl_inSM_noSing, by=list(metadata_Shwnl_inSM$SCIE_NAME), FUN=sum)
+Shwnl_Seqs_per_Country<-aggregate(t_Shwnl_inSM_noSing, by=list(metadata_Shwnl_inSM$COUNTRY), FUN=sum)
+```
+
+# **Step 4**:
+  Getting total OTU and sequence numbers from SM metadata table, as those are provided from the start.
+
+```{r, eval=FALSE}
+clean_metadata <- Shwnl_metadata[,-1]
+rownames(clean_metadata)<-Shwnl_metadata[,1]
+
+#Formatting table to aggregate
+clean_metadata[,"SampleID"] <- NA
+clean_metadata<-clean_metadata[,c(ncol(clean_metadata),1:(ncol(clean_metadata)-1))]
+clean_metadata[,1] <- rownames(clean_metadata)
+colnames(clean_metadata)[1]<-"SampleID"
+rownames(clean_metadata) <- NULL
+
+#Aggregating by Country and Sponge species
+Country<-as.data.frame(clean_metadata[,c(8,4,5)])
+SM_Country_OTUs_Seqs<-aggregate(. ~ COUNTRY, data=Country, FUN=sum)
+Sponges<-as.data.frame(clean_metadata[,c(2,4,5)])
+SM_Sponges_OTUs_Seqs<-aggregate(. ~ SCIE_NAME, data=Sponges, FUN=sum)
+
+#Cutting out countries and sponge species not present in the Shwnl table
+country_shwnl_list<-as.data.frame(Shwnl_Seqs_per_Country$Group.1)
+colnames(country_shwnl_list)[1]<-"COUNTRY"
+SM_FiltbyShwnlCountry_OTUs_Seqs <- inner_join(country_shwnl_list, SM_Country_OTUs_Seqs, by="COUNTRY")
+
+sponge_shwnl_list<-as.data.frame(Shwnl_Seqs_per_SpongeSpecies$Group.1)
+colnames(sponge_shwnl_list)[1]<-"SCIE_NAME"
+SM_FiltbyShwnlSponges_OTUs_Seqs <- inner_join(sponge_shwnl_list, SM_Sponges_OTUs_Seqs, by="SCIE_NAME")
+
+```
+
+
+
+```{r, eval=FALSE}
+#Writing to files:
+write.table(Shwnl_OTUs_per_SpongeSpecies, "Shwnl_OTUs_per_SpongeSpecies.csv", sep = ",",quote=FALSE)
+write.table(Shwnl_OTUs_per_Country, "Shwnl_OTUs_per_Country.csv", sep = ",",quote=FALSE)
+write.table(Shwnl_Seqs_per_SpongeSpecies, "Shwnl_Seqs_per_SpongeSpecies.csv", sep = ",",quote=FALSE)
+write.table(Shwnl_Seqs_per_Country, "Shwnl_Seqs_per_Country.csv", sep = ",",quote=FALSE)
+write.table(SM_FiltbyShwnlSponges_OTUs_Seqs, "SM_FiltbyShwnlSponges_OTUs_Seqs.csv", sep=",", quote=FALSE)
+write.table(SM_FiltbyShwnlCountry_OTUs_Seqs, "SM_FiltbyShwnlCountry_OTUs_Seqs.csv", sep=",", quote=FALSE)
+```
+Compiled every table in Libreoffice Calc and that was it for Shewanellaceae OTUs.
+
+*Note: total values changed because of some previously undetected errors in sample naming. Those led R to think they were duplicates and to hide some diversity... All manually checked now :)*
